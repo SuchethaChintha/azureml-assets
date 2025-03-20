@@ -33,6 +33,7 @@ tags:
   license: apache-2.0
   SharedComputeCapacityEnabled: ''
   task: fill-mask
+  hiddenlayerscanned: ""
   huggingface_model_id: camembert-base
   inference_compute_allow_list: [Standard_DS3_v2, Standard_D4a_v4, Standard_D4as_v4,
     Standard_DS4_v2, Standard_D8a_v4, Standard_D8as_v4, Standard_DS5_v2, Standard_D16a_v4,
@@ -55,7 +56,7 @@ tags:
     Standard_NC8as_T4_v3, Standard_NC12s_v3, Standard_NC16as_T4_v3, Standard_NC24s_v3,
     Standard_NC64as_T4_v3, Standard_NC24ads_A100_v4, Standard_NC48ads_A100_v4, Standard_NC96ads_A100_v4,
     Standard_ND96asr_v4, Standard_ND96amsr_A100_v4, Standard_ND40rs_v2]
-version: 12
+version: 13
 description: |
   CamemBERT is a state-of-the-art language model for French based on the RoBERTa model.
 
@@ -93,6 +94,12 @@ description: |
   > The quality of some OSCAR sub-corpora might be lower than expected, specifically for the lowest-resource languages.
 
   > Constructed from Common Crawl, Personal and sensitive information might be present.
+
+  # Model Evaluation samples
+
+  Task | Use case | Dataset | Python sample (Notebook) | CLI with YAML
+  |--|--|--|--|--|
+  Fill Mask|Fill Mask|<a href="https://huggingface.co/datasets/rcds/wikipedia-for-mask-filling" target="_blank">rcds/wikipedia-for-mask-filling</a>|<a href="https://aka.ms/azureml-eval-sdk-fill-mask/" target="_blank">evaluate-model-fill-mask.ipynb</a>|<a href="https://aka.ms/azureml-eval-cli-fill-mask/" target="_blank">evaluate-model-fill-mask.yml</a>
 
   # Inference samples
 

@@ -24,7 +24,12 @@ def ner_predictor_wrapper_for_hftransformers(transformers_class):
         Returns:
             _type_: _description_
         """
-        transformers_class._override_model_config(params)
+        try:
+            transformers_class._override_model_config(params)
+        except AttributeError:
+            logger.info("Using newer version of mlflow.transformers._TransformersWrapper\
+                        model config override API")
+            transformers_class._merge_model_config_with_params(transformers_class.model_config, params)
         from azureml.evaluate.mlflow.hftransformers._task_based_predictors import NERPredictor
         predictor = NERPredictor(task_type="token-classification", model=transformers_class.pipeline.model,
                                  tokenizer=transformers_class.pipeline.tokenizer,
@@ -55,9 +60,11 @@ class TextNerPredictor(PredictWrapper):
             self.model._predict_fn = ner_predictor_wrapper_for_hftransformers(self.model._model_impl)
         try:
             y_pred = self.model.predict(X_test, **kwargs)
-        except TypeError:
+        except TypeError as e:
+            logger.warning(f"TypeError exception raised. Reason: {e}")
             y_pred = self.model.predict(X_test)
-        except RuntimeError:
+        except RuntimeError as e:
+            logger.warning(f"RuntimeError exception raised. Reason: {e}")
             return self.handle_device_failure(X_test, **kwargs)
 
         if isinstance(y_pred, pd.DataFrame):

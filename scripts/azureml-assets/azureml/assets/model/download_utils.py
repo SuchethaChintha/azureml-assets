@@ -133,7 +133,7 @@ def download_git_model(model_uri: str, model_dir: Path) -> bool:
 
 
 def run_azcopy(src_uri: str, dstn_uri: str, include_paths: List[str] = None, exclude_paths: List[str] = None,
-               as_subdir: bool = True) -> int:
+               as_subdir: bool = True, overwrite: bool = True, output_level: str = "essential") -> int:
     """Copy blobs between Azure storage accounts or to/from a local dir.
 
     Args:
@@ -142,13 +142,15 @@ def run_azcopy(src_uri: str, dstn_uri: str, include_paths: List[str] = None, exc
         include_paths (List[str], optional): List of paths to include.
         exclude_paths (List[str], optional): List of paths to exclude.
         as_subdir (bool, optional): If True, copy to a subdirectory under the destination URI.
+        overwrite (bool, optional): If True, overwrite the destination blobs.
+        output_level (str, optional): Output verbosity level parameter for azcopy. Defaults to "essential".
 
     Returns:
         int: Return code of azcopy command.
     """
     azcopy = shutil.which("azcopy")
     download_cmd = [azcopy, "copy", src_uri, dstn_uri, "--recursive", "--skip-version-check",
-                    "--output-level", "essential"]
+                    "--output-level", output_level]
 
     # AzureCloud, USGov, and China clouds should all the trusted Microsoft
     # suffixes built into azcop by default. If the cloud is not one of these,
@@ -162,24 +164,30 @@ def run_azcopy(src_uri: str, dstn_uri: str, include_paths: List[str] = None, exc
         download_cmd.extend(["--trusted-microsoft-suffixes", suffix])
 
     if not as_subdir:
-        download_cmd.extend(["--as-subdir=false"])
+        download_cmd.append("--as-subdir=false")
     if include_paths:
         download_cmd.extend(["--include-path", ';'.join(include_paths)])
     if exclude_paths:
         download_cmd.extend(["--exclude-path", ';'.join(exclude_paths)])
+
+    if not overwrite:
+        download_cmd.append("--overwrite=false")
 
     result = run_cmd(download_cmd)
     logger.print(f"azcopy result: {result}")
     return result
 
 
-def copy_azure_artifacts(src_uri: str, dstn_uri: str, copy_updater: CopyUpdater = None) -> bool:
+def copy_azure_artifacts(src_uri: str, dstn_uri: str, copy_updater: CopyUpdater = None,
+                         overwrite: bool = True, output_level: str = "essential") -> bool:
     """Copy blobs between Azure storage accounts.
 
     Args:
         src_uri (str): The source storage account URI.
         dstn_uri (str): The destination storage account URI.
         copy_updater (CopyUpdater): CopyUpdater object to update files during azcopy.
+        overwrite (bool): If True, overwrite the destination blobs.
+        output_level (str, optional): Output verbosity level parameter for azcopy. Defaults to "essential".
 
     Returns:
         bool: True if successful, False otherwise
@@ -187,7 +195,8 @@ def copy_azure_artifacts(src_uri: str, dstn_uri: str, copy_updater: CopyUpdater 
     try:
         # Copy between storage accounts, excluding any files to be updated
         update_paths = copy_updater.files if copy_updater else None
-        result = run_azcopy(src_uri, dstn_uri, exclude_paths=update_paths)
+        result = run_azcopy(src_uri, dstn_uri, exclude_paths=update_paths, overwrite=overwrite,
+                            output_level=output_level)
         if result:
             logger.log_error(f"Failed to copy model files from {src_uri}")
             return False
@@ -199,7 +208,8 @@ def copy_azure_artifacts(src_uri: str, dstn_uri: str, copy_updater: CopyUpdater 
         # Download files to a temporary directory, update, and then upload
         with tempfile.TemporaryDirectory() as temp_dir:
             # Download files to update
-            result = run_azcopy(src_uri, temp_dir, include_paths=update_paths)
+            result = run_azcopy(src_uri, temp_dir, include_paths=update_paths, overwrite=overwrite,
+                                output_level=output_level)
             if result:
                 logger.log_error(f"Failed to download model files to update from {src_uri}")
                 return False
@@ -209,7 +219,7 @@ def copy_azure_artifacts(src_uri: str, dstn_uri: str, copy_updater: CopyUpdater 
             _ = copy_updater.update_files(subdir)
 
             # Upload updated files
-            result = run_azcopy(temp_dir, dstn_uri, as_subdir=False)
+            result = run_azcopy(temp_dir, dstn_uri, as_subdir=False, overwrite=overwrite, output_level=output_level)
             if result:
                 logger.log_error(f"Failed to upload updated model files to {dstn_uri}")
                 return False

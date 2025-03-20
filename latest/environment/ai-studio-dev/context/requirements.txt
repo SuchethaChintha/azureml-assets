@@ -1,0 +1,16 @@
+# Install Python SDK
+azure-ai-ml==1.26.0
+openai
+# hardcoded the version of azureml-mlflow here for faster Docker image building speed
+azureml-mlflow==1.59.0.post1
+# copilot dependencies
+keyrings.alt
+ipykernel
+langchain
+langchain-openai
+semantic-kernel
+pytest
+keyring
+# dev dependencies
+setuptools>70.0.0
+azureml-inference-server-http

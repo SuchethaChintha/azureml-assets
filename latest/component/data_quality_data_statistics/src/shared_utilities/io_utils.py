@@ -3,13 +3,21 @@
 
 """This file contains utilities to read write data."""
 
-from enum import Enum
-import yaml
 import numpy as np
+import time
+import traceback
+import yaml
+
+from azureml.dataprep.api.errorhandlers import ExecutionError
+from azureml.dataprep.api.mltable._mltable_helper import UserErrorException
+from enum import Enum
 from pyspark.sql import SparkSession, DataFrame
+from pyspark.sql.types import StructType
+from shared_utilities.constants import MISSING_OBO_CREDENTIAL_HELPFUL_ERROR_MESSAGE
 from shared_utilities.event_utils import post_warning_event
 from shared_utilities.momo_exceptions import DataNotFoundError, InvalidInputError
-from model_data_collector_preprocessor.store_url import StoreUrl  # TODO: move StoreUrl to share_utilities
+from shared_utilities.store_url import StoreUrl
+from .constants import MAX_RETRY_COUNT
 
 
 class NoDataApproach(Enum):
@@ -106,38 +114,123 @@ def try_read_mltable_in_spark(mltable_path: str, input_name: str, no_data_approa
         if input_not_found_category != InputNotFoundCategory.NOT_INPUT_MISSING:
             return process_input_not_found(input_not_found_category)
         else:
+            # TODO: remove this check block after we are able to support submitting managed identity MoMo graphs.
+            try:
+                from azure.ai.ml.identity import CredentialUnavailableError
+                if isinstance(error, CredentialUnavailableError):
+                    raise InvalidInputError(MISSING_OBO_CREDENTIAL_HELPFUL_ERROR_MESSAGE.format(message=error.message))
+            except ModuleNotFoundError:
+                print(
+                    "Failed to import from module azure-ai-ml to check if we have CredentialUnavailableError. "
+                    "Check for LM failure or stale cache being used. Throwing exception as usual.")
             raise error
     return df if df and not df.isEmpty() else process_input_not_found(InputNotFoundCategory.NO_INPUT_IN_WINDOW)
 
 
-def _verify_mltable_paths(mltable_path: str, ws=None, mltable_dict: dict = None):
-    """Verify paths in mltable is supported."""
-    mltable_dict = mltable_dict or yaml.safe_load(StoreUrl(mltable_path, ws).read_file_content("MLTable"))
-    for path in mltable_dict.get("paths", []):
-        path_val = path.get("file") or path.get("folder") or path.get("pattern")
-        try:
-            path_url = StoreUrl(path_val, ws)  # path_url itself must be valid
-            if not path_url.is_local_path():   # and it must be either local(absolute or relative) path
-                _ = path_url.get_credential()  # or credential azureml path
-        except InvalidInputError as iie:
-            raise InvalidInputError(f"Invalid or unsupported path {path_val} in MLTable {mltable_path}") from iie
+def _write_mltable_yaml(mltable_obj, folder_path: str):
+    try:
+        store_url = StoreUrl(folder_path)
+        content = yaml.dump(mltable_obj, default_flow_style=False)
+        store_url.write_file(content, "MLTable", True)
+        return True
+    except InvalidInputError as iie:
+        print(f"Unretriable InvalidInputError writing mltable file: {iie}")
+        raise iie
+    except Exception:
+        print(f"Error writing mltable file: \n{traceback.format_exc()}")
+        return False
 
 
-def read_mltable_in_spark(mltable_path: str):
+def read_mltable_in_spark(mltable_path: str) -> DataFrame:
     """Read mltable in spark."""
-    _verify_mltable_paths(mltable_path)
+    if mltable_path is None:
+        raise InvalidInputError("MLTable path is None.")
+    # validate if we can access the mltable, e.g. if env. is ready to access credential-less data
+    store_url = StoreUrl(mltable_path)
+    store_url.get_credential(True)  # will raise exception if not able to access
+
     spark = init_spark()
-    return spark.read.mltable(mltable_path)
+    try:
+        return spark.read.mltable(mltable_path)
+    except UserErrorException as ue:
+        ue_str = str(ue)
+        if 'Not able to find MLTable file' in ue_str:
+            raise InvalidInputError(f"Failed to read MLTable {mltable_path}, it is not found or not accessible.")
+        elif 'MLTable yaml is invalid' in ue_str:
+            raise InvalidInputError(f"Invalid MLTable yaml content in {mltable_path}, please make sure all paths "
+                                    "defined in MLTable is in correct format and supported scheme.")
+        else:
+            raise ue
+    except ExecutionError as ee:
+        ee_str = str(ee)
+        if 'AuthenticationError("RuntimeError: Non-matching ' in ee_str:
+            raise InvalidInputError(f"Failed to read MLTable {mltable_path}, "
+                                    "please make sure only data defined in the same AML workspace is used in MLTable.")
+        elif 'StreamError(NotFound)' in ee_str and 'The requested stream was not found' in ee_str:
+            raise InvalidInputError(f"One or more paths defined in MLTable {mltable_path} is not found.")
+        else:
+            raise ee
+    except ValueError as ve:
+        ve_str = str(ve)
+        if 'AuthenticationError("RuntimeError: Non-matching ' in ve_str:
+            raise InvalidInputError(f"Failed to read MLTable {mltable_path}, it is not from the same AML workspace.")
+        elif 'StreamError(PermissionDenied(' in ve_str:
+            # TODO add link to doc
+            raise InvalidInputError(f"No permission to read MLTable {mltable_path}, please make it as credential data."
+                                    " Or you can run Model Monitor job with managed identity and grant proper data "
+                                    "access permission to the user managed identity attached to this AML workspace.")
+        else:
+            raise ve
+    except RuntimeError as re:
+        re_str = str(re)
+        if 'Data asset service returned invalid MLTable yaml' in re_str:
+            raise InvalidInputError(f"Failed to read MLTable {mltable_path}, looks like the MLTable is created with "
+                                    "DataSetV1 API, please recreate it with DataSetV2 API. "
+                                    "You can do it in the AML studio or with the latest SDK.")
+        else:
+            raise re
+    except SystemError as se:
+        if 'Name or service not known' in str(se):
+            raise InvalidInputError(f"Failed to read MLTable {mltable_path}, the storage account is not found.")
+        else:
+            raise se
 
 
 def save_spark_df_as_mltable(metrics_df, folder_path: str):
     """Save spark dataframe as mltable."""
-    metrics_df.write.option("output_format", "parquet").option(
-        "overwrite", True
-    ).mltable(folder_path)
+    base_path = folder_path.rstrip('/')
+    output_path_pattern = base_path + "/data/*.parquet"
+
+    mltable_obj = {
+        'paths': [{'pattern': output_path_pattern}],
+        'transformations': ['read_parquet']
+    }
+
+    retries = 0
+    while True:
+        if _write_mltable_yaml(mltable_obj, folder_path):
+            break
+        retries += 1
+        if retries >= MAX_RETRY_COUNT:
+            raise Exception("Failed to write mltable yaml file after multiple retries.")
+        time.sleep(1)
+
+    metrics_df.write.mode("overwrite").parquet(base_path+"/data/")
 
 
 def np_encoder(object):
     """Json encoder for numpy types."""
     if isinstance(object, np.generic):
         return object.item()
+
+
+def create_spark_df(rows: list, schema: StructType):
+    """Create Spark DataFrame."""
+    spark = init_spark()
+    return spark.createDataFrame(data=rows, schema=schema)
+
+
+def save_empty_dataframe(schema: StructType, output_path: str):
+    """Save empty Data Spark DataFrame."""
+    df = create_spark_df([], schema)
+    save_spark_df_as_mltable(df, output_path)

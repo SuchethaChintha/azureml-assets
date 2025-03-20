@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:20240226.v1
+FROM mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04:20250303.v1
 
 # Set the shared environment path
 ENV AZUREML_CONDA_ENVIRONMENT_PATH /azureml-envs/rag-embeddings
@@ -14,7 +14,7 @@ RUN conda env create -p $AZUREML_CONDA_ENVIRONMENT_PATH -f conda_dependencies.ya
     conda clean -a -y
 
 # Sentence Transformers CPU only install
-RUN pip install --no-cache-dir torch==2.0.0+cpu -f https://download.pytorch.org/whl/torch_stable.html && \
+RUN pip install --no-cache-dir torch==2.3.1+cpu -f https://download.pytorch.org/whl/torch_stable.html && \
     pip install --no-cache-dir transformers && \
     pip install --no-cache-dir tqdm numpy scikit-learn scipy nltk sentencepiece pillow && \
     pip install --no-cache-dir sentence-transformers --no-deps
@@ -103,10 +103,11 @@ RUN python3 -m nltk.downloader punkt && \
 
 ENV TIKA_SERVER_JAR file:///tika-server.jar
 
-RUN downloadUrl='http://search.maven.org/remotecontent?filepath=org/apache/tika/tika-server-standard/2.9.1/tika-server-standard-2.9.1.jar'; \
-    downloadMd5='4a0e60c6698b85881a3ef28a68669ac5'; \
+# Install tika server
+RUN downloadUrl='http://search.maven.org/remotecontent?filepath=org/apache/tika/tika-server-standard/3.1.0/tika-server-standard-3.1.0.jar'; \
+    downloadMd5='http://search.maven.org/remotecontent?filepath=org/apache/tika/tika-server-standard/3.1.0/tika-server-standard-3.1.0.jar.md5'; \
     wget --progress=dot:giga -O tika-server.jar "$downloadUrl"; \
     # tika-python looks for tika-server.jar.md5 file along with TIKA_SERVER_JAR
-    echo -n "$downloadMd5" > tika-server.jar.md5; \
+    wget -O tika-server.jar.md5 "$downloadMd5"; \
     # basic smoke test
     python -c 'from tika import parser; parser.from_file("/root/.bashrc")'

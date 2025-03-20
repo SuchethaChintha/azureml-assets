@@ -15,13 +15,13 @@ properties:
     Standard_NC24s_v3, Standard_NC64as_T4_v3, Standard_NC24ads_A100_v4, Standard_NC48ads_A100_v4,
     Standard_NC96ads_A100_v4, Standard_ND96asr_v4, Standard_ND96amsr_A100_v4, Standard_ND40rs_v2
 tags:
-  Preview: ''
   training_dataset: SA-1B
   huggingface_model_id: facebook/sam-vit-huge
-  author: facebook
+  author: Meta
   license: apache-2.0
   task: image-segmentation
   SharedComputeCapacityEnabled: ''
+  hiddenlayerscanned: ''
   inference_compute_allow_list: [Standard_DS5_v2, Standard_D8a_v4, Standard_D8as_v4,
     Standard_D16a_v4, Standard_D16as_v4, Standard_D32a_v4, Standard_D32as_v4, Standard_D48a_v4,
     Standard_D48as_v4, Standard_D64a_v4, Standard_D64as_v4, Standard_D96a_v4, Standard_D96as_v4,
@@ -31,7 +31,7 @@ tags:
     Standard_E64s_v3, Standard_NC6s_v3, Standard_NC8as_T4_v3, Standard_NC12s_v3, Standard_NC16as_T4_v3,
     Standard_NC24s_v3, Standard_NC64as_T4_v3, Standard_NC24ads_A100_v4, Standard_NC48ads_A100_v4,
     Standard_NC96ads_A100_v4, Standard_ND96asr_v4, Standard_ND96amsr_A100_v4, Standard_ND40rs_v2]
-version: 3
+version: 4
 description: |
   The **Segment Anything Model (SAM)** produces high quality object masks from input prompts such as points or boxes, and it can be used to generate masks for all objects in an image. It has been trained on a [dataset](https://segment-anything.com/dataset/index.html) of 11 million images and 1.1 billion masks, and has strong zero-shot performance on a variety of segmentation tasks.
 

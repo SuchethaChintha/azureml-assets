@@ -16,6 +16,7 @@ from typing import List
 from azure.ai.ml import load_model
 from azure.ai.ml.entities import Model
 from azure.ai.ml.operations._run_history_constants import JobStatus
+from azure.core.exceptions import ClientAuthenticationError
 from azure.identity import AzureCliCredential
 
 import azureml.assets as assets
@@ -32,6 +33,7 @@ WARNING_TEMPLATE = "Warning during validation of {file}: {warning}"
 NAMING_CONVENTION_URL = "https://github.com/Azure/azureml-assets/wiki/Asset-naming-convention"
 INVALID_STRINGS = [["azureml", "azure"], "aml"]  # Disallow these in any asset name
 NON_MODEL_INVALID_STRINGS = ["microsoft"]  # Allow these in model names and other assets related to models
+MODEL_NAMES_VALIDATION_OVERRIDE_PREFIX = ["Azure-AI-"]  # Exception for Azure-AI models
 MODEL_RELATED_ASSETS = [assets.AssetType.MODEL, assets.AssetType.EVALUATIONRESULT]
 NON_MODEL_NAME_PATTERN = re.compile(r"^[a-z][a-z0-9_.-]{0,254}$")
 
@@ -46,17 +48,6 @@ MODEL_VALIDATION_RESULTS_FOLDER = "validation_results"
 VALIDATION_SUMMARY = "results.json"
 SUPPORTED_INFERENCE_SKU_FILE_NAME = "config/supported_inference_skus.json"
 SUPPORTED_INFERENCE_SKU_FILE_PATH = Path(__file__).parent / SUPPORTED_INFERENCE_SKU_FILE_NAME
-
-# credential and mlcient initialization
-# credential might not always be present
-# check in try-except block
-credential = None
-try:
-    credential = AzureCliCredential()
-    token = credential.get_token("https://management.azure.com/.default")
-except Exception as e:
-    credential = None
-    logger.log_warning(f"Exception in creating credential. {e}")
 
 
 class MLFlowModelProperties:
@@ -88,6 +79,10 @@ class MLFlowModelTags:
 
     # This enables model to use shared quota for deployment
     SHARED_COMPUTE_CAPACITY = "SharedComputeCapacityEnabled"
+
+    # make sure all prod models has hiddenlayerscanned tag added
+    # model scan and tag has to be added manually currently
+    HIDDEN_LAYERS_SCANNED = "hiddenlayerscanned"
 
 
 class ModelValidationState:
@@ -393,6 +388,9 @@ def validate_name(asset_config: assets.AssetConfig) -> int:
 
         for invalid_string in string_group_list:
             if invalid_string in asset_name_lowercase:
+                if (asset_config.type == assets.AssetType.MODEL and
+                        any(asset_name.startswith(exception) for exception in MODEL_NAMES_VALIDATION_OVERRIDE_PREFIX)):
+                    continue
                 # Complain only about the first matching string
                 _log_error(asset_config.file_name_with_path,
                            f"Name '{asset_name}' contains invalid string '{invalid_string}'")
@@ -751,13 +749,13 @@ def confirm_min_sku_spec(
     Returns:
         int: Number of errors.
     """
-    subscription_id = os.getenv("SUBSCRIPTION_ID", None)
-    if not (credential and subscription_id):
-        logger.log_warning("credential or subscription_id missing. Skipping min sku valdn")
+    subscription_id = os.getenv("SUBSCRIPTION_ID")
+    if not subscription_id:
+        logger.log_warning("subscription_id missing. Skipping min sku valdn")
         return 0
 
     try:
-        all_sku_details = get_all_sku_details(credential, subscription_id)
+        all_sku_details = get_all_sku_details(AzureCliCredential(), subscription_id)
         min_disk = min_cpu_mem = min_ngpus = min_ncpus = -1
         for sku in supported_skus:
             sku_details = all_sku_details.get(sku)
@@ -805,8 +803,10 @@ def confirm_min_sku_spec(
             )
 
             return 1
+    except ClientAuthenticationError as e:
+        logger.log_warning(f"Failed to log in to Azure, skipping min sku valdn. {e}")
     except Exception as e:
-        _log_error(asset_file_name_with_path, f"Exception in fetching SKU details => {e}")
+        _log_error(asset_file_name_with_path, f"Exception in fetching SKU details: {e}")
         return 1
     return 0
 
@@ -849,6 +849,17 @@ def validate_model_spec(asset_config: assets.AssetConfig) -> int:
     if not model.tags.get(MLFlowModelTags.LICENSE):
         _log_error(asset_config.file_name_with_path, f"{MLFlowModelTags.LICENSE} missing")
         error_count += 1
+
+    # TODO: skip hidden layer valdn till most models are scanned
+    # if MLFlowModelTags.HIDDEN_LAYERS_SCANNED not in model.tags:
+    #     _log_error(
+    #         asset_config.file_name_with_path,
+    #         (
+    #             "`hiddenlayerscanned` tag missing. "
+    #             "Model is not scanned by HiddenLayer ModelScanner tool. Please scan the model and retry"
+    #         )
+    #     )
+    #     error_count += 1
 
     # shared compute check
     if MLFlowModelTags.SHARED_COMPUTE_CAPACITY not in model.tags:
@@ -1060,10 +1071,32 @@ def validate_assets(input_dirs: List[Path],
                 if check_environment_version:
                     error_count += validate_environment_version(asset_config)
 
-            if asset_config.type == assets.AssetType.PROMPT or asset_config.type == assets.AssetType.EVALUATIONRESULT:
-                error_count += validate_tags(asset_config, 'tag_values_shared.yaml')
+            if asset_config.type == assets.AssetType.EVALUATIONRESULT:
+                error_count += validate_tags(asset_config, 'evaluationresult/tag_values_shared.yaml')
+
+                asset_spec = asset_config._spec._yaml
+                evaluation_type = asset_spec.get('tags', {}).get('evaluation_type', None)
+
+                evaluation_tag_files = {
+                    'text_generation': 'evaluationresult/tag_values_text_generation.yaml',
+                    'text_embeddings': 'evaluationresult/tag_values_text_embeddings.yaml',
+                    'vision': 'evaluationresult/tag_values_vision.yaml',
+                    'text_quality': 'evaluationresult/tag_values_text_quality.yaml',
+                    'text_performance': 'evaluationresult/tag_values_text_performance.yaml',
+                    'text_cost': 'evaluationresult/tag_values_text_cost.yaml'
+                }
+
+                if evaluation_type in evaluation_tag_files:
+                    error_count += validate_tags(asset_config, evaluation_tag_files[evaluation_type])
+                else:
+                    _log_error(
+                        asset_config.file_name_with_path,
+                        f"Asset '{asset_config.name}' has unknown evaluation_type: '{evaluation_type}'"
+                    )
+                    error_count += 1
 
             if asset_config.type == assets.AssetType.PROMPT:
+                error_count += validate_tags(asset_config, 'tag_values_shared.yaml')
                 error_count += validate_tags(asset_config, 'tag_values_prompt.yaml')
 
             # Validate categories

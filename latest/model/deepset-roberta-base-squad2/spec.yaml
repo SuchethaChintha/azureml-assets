@@ -16,11 +16,12 @@ properties:
     Standard_NC8as_T4_v3, Standard_NC12s_v3, Standard_NC16as_T4_v3, Standard_NC24s_v3,
     Standard_NC64as_T4_v3, Standard_NC24ads_A100_v4, Standard_NC48ads_A100_v4, Standard_NC96ads_A100_v4,
     Standard_ND96asr_v4, Standard_ND96amsr_A100_v4, Standard_ND40rs_v2
-  finetune-min-sku-spec: 4|1|28|176
+  finetune-min-sku-spec: 4|1|28|64
   finetune-recommended-sku: Standard_NV12s_v3, Standard_NV24s_v3, Standard_NV48s_v3,
     Standard_NC6s_v3, Standard_NC12s_v3, Standard_NC24s_v3, Standard_NC24rs_v3, Standard_NC4as_T4_v3,
-    Standard_NC8as_T4_v3, Standard_NC16as_T4_v3, Standard_NC64as_T4_v3, Standard_ND40rs_v2,
-    Standard_ND96asr_v4
+    Standard_NC8as_T4_v3, Standard_NC16as_T4_v3, Standard_NC64as_T4_v3, Standard_NC24ads_A100_v4,
+    Standard_NC48ads_A100_v4, Standard_NC96ads_A100_v4, Standard_ND40rs_v2, Standard_ND96asr_v4,
+    Standard_ND96amsr_A100_v4
   finetuning-tasks: text-classification, question-answering
   inference-min-sku-spec: 2|0|8|28
   inference-recommended-sku: Standard_DS3_v2, Standard_D4a_v4, Standard_D4as_v4, Standard_DS4_v2,
@@ -41,6 +42,7 @@ tags:
   model_specific_defaults: {'apply_deepspeed': 'true', 'apply_lora': 'true', 'apply_ort': 'true'}
   SharedComputeCapacityEnabled: ''
   task: question-answering
+  hiddenlayerscanned: ""
   huggingface_model_id: deepset/roberta-base-squad2
   inference_compute_allow_list: [Standard_DS3_v2, Standard_D4a_v4, Standard_D4as_v4,
     Standard_DS4_v2, Standard_D8a_v4, Standard_D8as_v4, Standard_DS5_v2, Standard_D16a_v4,
@@ -65,9 +67,10 @@ tags:
     Standard_ND96asr_v4, Standard_ND96amsr_A100_v4, Standard_ND40rs_v2]
   finetune_compute_allow_list: [Standard_NV12s_v3, Standard_NV24s_v3, Standard_NV48s_v3,
     Standard_NC6s_v3, Standard_NC12s_v3, Standard_NC24s_v3, Standard_NC24rs_v3, Standard_NC4as_T4_v3,
-    Standard_NC8as_T4_v3, Standard_NC16as_T4_v3, Standard_NC64as_T4_v3, Standard_ND40rs_v2,
-    Standard_ND96asr_v4]
-version: 13
+    Standard_NC8as_T4_v3, Standard_NC16as_T4_v3, Standard_NC64as_T4_v3, Standard_NC24ads_A100_v4,
+    Standard_NC48ads_A100_v4, Standard_NC96ads_A100_v4, Standard_ND40rs_v2, Standard_ND96asr_v4,
+    Standard_ND96amsr_A100_v4]
+version: 16
 description: |
   This is the [roberta-base](https://huggingface.co/roberta-base) model, fine-tuned using the [SQuAD2.0](https://huggingface.co/datasets/squad_v2) dataset. It's been trained on question-answer pairs, including unanswerable questions, for the task of Question Answering. 
 
@@ -103,6 +106,12 @@ description: |
   "NoAns_f1": 81.79983179142137,
   "NoAns_total": 5945
   ```
+
+  # Model Evaluation samples
+
+  Task|Use case|Dataset|Python sample (Notebook)|CLI with YAML
+  |--|--|--|--|--|
+  Question Answering|Extractive Q&A|<a href="https://huggingface.co/datasets/squad_v2" target="_blank">Squad v2</a>|<a href="https://aka.ms/azureml-eval-sdk-question-answering" target="_blank">evaluate-model-question-answering.ipynb</a>|<a href="https://aka.ms/azureml-eval-cli-question-answering" target="_blank">evaluate-model-question-answering.yml</a>
 
   # Inference samples
 

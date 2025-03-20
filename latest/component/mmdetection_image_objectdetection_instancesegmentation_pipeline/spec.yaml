@@ -1,7 +1,7 @@
 $schema: https://azuremlschemas.azureedge.net/latest/pipelineComponent.schema.json
 type: pipeline
 
-version: 0.0.11
+version: 0.0.26
 name: mmdetection_image_objectdetection_instancesegmentation_pipeline
 display_name: Image Object Detection and Instance Segmentation MMDetection Pipeline
 description: Pipeline component for image object detection and instance segmentation
@@ -362,7 +362,7 @@ inputs:
   # model checkpointing limit
   save_total_limit:
     type: integer
-    default: -1
+    default: 5
     optional: true
     description: If a value is passed, will limit the total amount of checkpoints.
       Deletes the older checkpoints in output_dir. If the value is -1 saves all checkpoints".
@@ -419,14 +419,16 @@ inputs:
     type: string
     default: label
     optional: true
-    description: Label column name in provided test dataset, for example "label".
+    description: Label column name to be ignored by model for prediction purposes,
+      for example "label".
 
   input_column_names:
     type: string
-    default: image_url
+    default: image,image_meta_info,text_prompt
     optional: true
-    description: Input column names in provided test dataset, for example column1.
-      Add comma delimited values in case of multiple input columns, for example column1,column2.
+    description: Input column names provided to model for prediction, for example
+      column1. Add comma delimited values in case of multiple input columns, for example
+      column1,column2.
 
   evaluation_config:
     type: uri_file
@@ -452,9 +454,32 @@ outputs:
     description: Test Data Evaluation Results
 
 jobs:
+  finetune_common_validation:
+    type: command
+    component: azureml:finetune_common_validation:0.0.8
+    compute: ${{parent.inputs.compute_model_import}}
+    inputs:
+      mlflow_model_path: ${{parent.inputs.mlflow_model}}
+      train_mltable_path: ${{parent.inputs.training_data}}
+      validation_mltable_path: ${{parent.inputs.validation_data}}
+      test_mltable_path: ${{parent.inputs.test_data}}
+      compute_model_import: ${{parent.inputs.compute_model_import}}
+      compute_finetune: ${{parent.inputs.compute_finetune}}
+      instance_count: ${{parent.inputs.instance_count}}
+      process_count_per_instance: ${{parent.inputs.process_count_per_instance}}
+      compute_model_evaluation: ${{parent.inputs.compute_model_evaluation}}
+      task_name: ${{parent.inputs.task_name}}
+      label_column_name: label
+      user_column_names: image_url,label
+      test_batch_size: ${{parent.inputs.test_batch_size}}
+      device: auto
+      evaluation_config: ${{parent.inputs.evaluation_config}}
+      evaluation_config_params: '${{parent.inputs.evaluation_config_params}}'
+      task_specific_extra_params: '"model_family=${{parent.inputs.model_family}};model_name=${{parent.inputs.model_name}};metric_for_best_model=${{parent.inputs.metric_for_best_model}};number_of_epochs=${{parent.inputs.number_of_epochs}}"'
+
   image_od_is_model_import:
     type: command
-    component: azureml:mmdetection_image_objectdetection_instancesegmentation_model_import:0.0.11
+    component: azureml:mmdetection_image_objectdetection_instancesegmentation_model_import:0.0.20
     compute: ${{parent.inputs.compute_model_import}}
     inputs:
       model_family: ${{parent.inputs.model_family}}
@@ -462,9 +487,11 @@ jobs:
       pytorch_model: ${{parent.inputs.pytorch_model}}
       mlflow_model: ${{parent.inputs.mlflow_model}}
       download_from_source: ${{parent.inputs.download_from_source}}
+      validation_output: ${{parent.jobs.finetune_common_validation.outputs.validation_info}}
+
   image_od_is_finetune:
     type: command
-    component: azureml:mmdetection_image_objectdetection_instancesegmentation_finetune:0.0.11
+    component: azureml:mmdetection_image_objectdetection_instancesegmentation_finetune:0.0.21
     compute: ${{parent.inputs.compute_finetune}}
     distribution:
       type: pytorch
@@ -517,23 +544,25 @@ jobs:
     outputs:
       mlflow_model_folder: ${{parent.outputs.mlflow_model_folder}}
       pytorch_model_folder: ${{parent.outputs.pytorch_model_folder}}
+
   model_prediction:
     type: command
-    component: azureml:model_prediction:0.0.19
+    component: azureml:model_prediction:0.0.35
     compute: '${{parent.inputs.compute_model_evaluation}}'
     inputs:
       task: '${{parent.inputs.task_name}}'
-      test_data: '${{parent.inputs.test_data}}'
-      mlflow_model: '${{parent.jobs.image_od_is_finetune.outputs.mlflow_model_folder}}'
       label_column_name: '${{parent.inputs.label_column_name}}'
       input_column_names: '${{parent.inputs.input_column_names}}'
       batch_size: '${{parent.inputs.test_batch_size}}'
       device: auto
       evaluation_config: '${{parent.inputs.evaluation_config}}'
       evaluation_config_params: '${{parent.inputs.evaluation_config_params}}'
+      test_data: '${{parent.inputs.test_data}}'
+      mlflow_model: '${{parent.jobs.image_od_is_finetune.outputs.mlflow_model_folder}}'
+
   compute_metrics:
     type: command
-    component: azureml:compute_metrics:0.0.19
+    component: azureml:compute_metrics:0.0.35
     compute: '${{parent.inputs.compute_model_evaluation}}'
     inputs:
       task: '${{parent.inputs.task_name}}'

@@ -1,5 +1,5 @@
 # PTCA Image (enabling Singularity Support)
-FROM mcr.microsoft.com/aifx/acpt/stable-ubuntu2004-cu117-py38-torch201:biweekly.202402.2
+FROM mcr.microsoft.com/aifx/acpt/stable-ubuntu2004-cu118-py310-torch222:biweekly.202503.1
 
 RUN apt-get update && apt-get -y upgrade
 
@@ -14,11 +14,14 @@ RUN conda env create -p $CONDA_PREFIX -f conda.yaml -q && \
     conda run -p $CONDA_PREFIX pip cache purge && \
     conda clean -a -y
 
+# clean conda and pip caches
+RUN rm -rf ~/.cache/pip
+
 # Prepend path to AzureML conda environment
 ENV PATH=$CONDA_PREFIX/bin:$PATH
 
 # This is needed for mpi to locate libpython
 ENV LD_LIBRARY_PATH $CONDA_PREFIX/lib:$LD_LIBRARY_PATH
 
-# not able to install packages with extra requires in conda.yaml
-RUN pip install azureml-acft-common-components["image"]>=0.0.9
+# Temp fix for env vuln
+RUN pip install mlflow==2.16.0  

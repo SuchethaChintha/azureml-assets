@@ -15,15 +15,28 @@ import logging
 import os
 import re
 import tempfile
-import traceback
+import mlflow
+import socket
+import json
+import uuid
 
 import pandas as pd
-import requests
-from azure.ai.generative.evaluate import evaluate
-from azure.ai.ml.identity import AzureMLOnBehalfOfCredential
+from azure.ai.evaluation._model_configurations import AzureOpenAIModelConfiguration
+from azure.ai.evaluation import (
+    evaluate,
+    CoherenceEvaluator,
+    FluencyEvaluator,
+    GroundednessEvaluator,
+    RelevanceEvaluator,
+    SimilarityEvaluator)
+from shared_utilities.llm_utils import _WorkspaceConnectionTokenManager
 from pyspark.sql.types import IntegerType, StructField, StructType, StringType
 from pyspark.sql.functions import col
-from shared_utilities import io_utils
+from shared_utilities.io_utils import (
+    try_read_mltable_in_spark_with_error,
+    save_spark_df_as_mltable,
+    init_spark,
+)
 from shared_utilities.momo_exceptions import InvalidInputError
 
 _logger = logging.getLogger(__file__)
@@ -36,20 +49,14 @@ PROMPT = "prompt"
 COMPLETION = "completion"
 CONTEXT = "context"
 GROUND_TRUTH = "ground_truth"
+QUERY = "query"
+RESPONSE = "response"
+COLUMN_MAPPING = "column_mapping"
 CORRELATION_ID = "correlationid"
-TRACE_ID = "traceid"
-ROOT_SPAN = "rootspan"
+TRACE_ID = "trace_id"
+ROOT_SPAN = "root_span"
 
 PASSTHROUGH_COLUMNS = [CORRELATION_ID, TRACE_ID, ROOT_SPAN]
-
-
-# ==================  HTTP Constants ==================
-# Timeout per each request: 5min
-HTTP_REQUEST_TIMEOUT = 300
-
-# ================= Endpoint Constants =================
-AZURE_ENDPOINT_DOMAIN_VALID_PATTERN_RE = r"^(?=.{1,255}$)(?!-)[a-zA-Z0-9-]{1,63}(?<!-)(\.(?!-)[a-zA-Z0-9-]{1,63}(?<!-))*\.(inference\.ml|openai)\.azure\.com(/openai)?$"  # noqa: E501
-AZURE_OPENAI_API_DEPLOYMENT_URL_PATTERN = "https://{}/openai/deployments/{}"
 
 # Parameters to OpenAI API requests
 OPENAI_REQUEST_PARAMS = [
@@ -83,14 +90,6 @@ THRESHOLD_PARAMS = [
     "fluency_rating_threshold",
     "coherence_rating_threshold",
 ]
-
-# ---
-
-CL_100K_BASE = "cl100k_base"
-GPT_35_TURBO = "gpt-35-turbo"
-GPT_35_TURBO_16K = "gpt-35-turbo-16k"
-GPT_4 = "gpt-4"
-GPT_4_32K = "gpt-4-32k"
 
 # ---
 
@@ -137,6 +136,14 @@ COMPACT_METRIC_NAME_TO_COLUMN = {
     SIMILARITY: GPT_SIMILARITY
 }
 
+EVALUATOR_NAME_TO_CLASS = {
+    GPT_GROUNDEDNESS: GroundednessEvaluator,
+    GPT_RELEVANCE: RelevanceEvaluator,
+    GPT_FLUENCY: FluencyEvaluator,
+    GPT_COHERENCE: CoherenceEvaluator,
+    GPT_SIMILARITY: SimilarityEvaluator
+}
+
 COLUMN_TO_COMPACT_METRIC_NAME = {v: k for k, v in COMPACT_METRIC_NAME_TO_COLUMN.items()}
 
 OUTPUT_SPLITTING_REGEX = r"[# ]*Task #*\d+:?"
@@ -162,135 +169,7 @@ THRESHOLD = "threshold_value"
 PRODUCTION_ROW_COUNT = "production_data"
 REFERENCE_ROW_COUNT = "reference_data"
 
-
-def _check_and_format_azure_endpoint_url(
-    url_pattern, domain_pattern_re, domain, api_version, model
-):
-    domain = domain.strip()
-    if domain.endswith('/'):
-        domain = domain[:-1]
-
-    if not re.match(domain_pattern_re, domain):
-        err_msg = f"Invalid Azure endpoint domain URL: {domain}."
-        err_msg += " The domain must be in the format of 'inference.ml.azure.com' or 'openai.azure.com'."
-        raise InvalidInputError(err_msg)
-
-    url = url_pattern.format(domain, model)
-
-    if api_version:
-        url += f"?api-version={api_version}"
-
-    return url
-
-
-class _WorkspaceConnectionTokenManager(object):
-    def __init__(
-        self,
-        *,
-        connection_name,
-        auth_header,
-        **kwargs,
-    ):
-        self.credential = self.get_aad_credential()
-        self.token = None
-        self.auth_header = auth_header
-
-        try:
-            from azureml.dataprep.api._aml_auth._azureml_token_authentication import AzureMLTokenAuthentication
-            from azure.ai.ml import MLClient
-            from azure.ai.ml.entities import WorkspaceConnection
-
-            self._credential = AzureMLTokenAuthentication._initialize_aml_token_auth()
-
-            uri_match = re.match(r"/subscriptions/(.*)/resourceGroups/(.*)/providers/Microsoft.MachineLearningServices/workspaces/(.*)/connections/(.*)",  # noqa: E501
-                                 connection_name, flags=re.IGNORECASE)
-
-            subscription_id = uri_match.group(1)
-            resource_group_name = uri_match.group(2)
-            workspace_name = uri_match.group(3)
-            ml_client = MLClient(
-                credential=self._credential,
-                subscription_id=subscription_id,
-                resource_group_name=resource_group_name,
-                workspace_name=workspace_name
-            )
-            if os.environ.get("AZUREML_RUN_ID", None) is not None:
-                # In AzureML Run context, we need to use workspaces internal endpoint that will accept
-                # AzureMLToken auth.
-                ml_client.connections._operation._client._base_url = f"{os.environ.get('AZUREML_SERVICE_ENDPOINT')}/rp/workspaces"  # noqa: E501
-                print(f"Using ml_client base_url: {ml_client.connections._operation._client._base_url}")
-                list_secrets_response = ml_client.connections._operation.list_secrets(
-                    connection_name=uri_match.group(4),
-                    resource_group_name=ml_client.resource_group_name,
-                    workspace_name=ml_client.workspace_name,
-                )
-                connection = WorkspaceConnection._from_rest_object(list_secrets_response)
-                print(f"Retrieved Workspace Connection: {connection.id}")
-
-                if connection.type != "azure_open_ai":
-                    raise Exception(f"Received unexpected endpoint type {connection.type}"
-                                    "only Azure Open AI endpoints are supported at this time")
-                api_version = API_VERSION
-                if hasattr(connection.metadata, METADATA_APIVERSION):
-                    api_version = connection.metadata[METADATA_APIVERSION]
-                # this was renamed in latest ml_client
-                if hasattr(connection.metadata, METADATA_DEPLOYMENTAPIVERSION):
-                    api_version = connection.metadata[METADATA_DEPLOYMENTAPIVERSION]
-                # api version
-                self.api_version = api_version
-                # base_url
-                self.domain_name = connection.target
-                # api_key
-                self.token = connection.credentials["key"]
-                self.api_type = None
-                if hasattr(connection.metadata, METADATA_APITYPE):
-                    self.api_type = connection.metadata[METADATA_APITYPE]
-            else:
-                raise Exception("Unable to retrieve the token to establish a Workspace Connection")
-        except Exception:
-            tb = traceback.format_exc()
-            raise Exception(f"Error encountered while attempting to authentication token: {tb}")
-
-    def get_aad_credential(self):
-        return AzureMLOnBehalfOfCredential(
-            AZUREML_SYNAPSE_CLUSTER_IDENTIFIER=os.environ[
-                "AZUREML_SYNAPSE_CLUSTER_IDENTIFIER"
-            ],
-            AZUREML_SYNAPSE_TOKEN_SERVICE_ENDPOINT=os.environ[
-                "AZUREML_SYNAPSE_TOKEN_SERVICE_ENDPOINT"
-            ],
-            AZUREML_RUN_ID=os.environ["AZUREML_RUN_ID"],
-            AZUREML_RUN_TOKEN_EXPIRY=os.environ["AZUREML_RUN_TOKEN_EXPIRY"],
-        )
-
-    def get_api_version(self):
-        return self.api_version
-
-    def get_endpoint_domain(self):
-        return self.domain_name
-
-    def get_token(self):
-        return self.token
-
-
-def _get_model_type(token_manager, get_model_endpoint):
-    try:
-        headers = {
-            "Content-Type": "application/json",
-            "api-key": token_manager.get_token()
-        }
-        response = requests.get(url=get_model_endpoint, headers=headers, timeout=HTTP_REQUEST_TIMEOUT)
-        if response.status_code == 200:
-            response_data = response.json()
-            model_type = response_data["model"]
-        else:
-            raise Exception(
-                "Received unexpected HTTP status: "
-                f"{response.status_code} {response.text}"
-            )
-    except Exception:
-        raise Exception("Error encountered while attempting to get model type")
-    return model_type
+DEFAULT_PROMPTFLOW_PATH = "/home/trusted-service-user/.promptflow/"
 
 
 def get_compact_metric_name(metric_name):
@@ -455,6 +334,11 @@ def get_passthrough_cols(df):
     return passthrough_cols
 
 
+def format_data_column(column):
+    """Format data column in promptflow-evals config format."""
+    return "${data." + column + "}"
+
+
 def apply_annotation(
     *,
     metric_names,
@@ -479,11 +363,7 @@ def apply_annotation(
     metric_names = process_metric_names(metric_names)
     validate_parameters(request_args, sample_rate)
 
-    if "chat_history" in [prompt_column_name, completion_column_name, context_column_name, ground_truth_column_name]:
-        raise NotImplementedError("chat_history column is not currently supported and cannot be used as specified "
-                                  "column. ")
-
-    production_df = io_utils.try_read_mltable_in_spark_with_error(production_dataset, "production_dataset")
+    production_df = try_read_mltable_in_spark_with_error(production_dataset, "production_dataset")
     # Ensure input data has the correct columns given the metrics
     # Question, answer required for coherence and fluency
     qa_required = len(list(set(QA_METRIC_NAMES).intersection(
@@ -543,11 +423,12 @@ def apply_annotation(
     production_df = production_df_sampled
     row_count = production_df.count()
 
-    spark = io_utils.init_spark()
+    spark = init_spark()
     spark_conf = spark.sparkContext.getConf()
     spark_conf_vars = {
         "AZUREML_SYNAPSE_CLUSTER_IDENTIFIER": "spark.synapse.clusteridentifier",  # noqa: E501
         "AZUREML_SYNAPSE_TOKEN_SERVICE_ENDPOINT": "spark.tokenServiceEndpoint",
+        "TID": "spark.synapse.workspace.tenantId"
     }
     for env_key, conf_key in spark_conf_vars.items():
         value = spark_conf.get(conf_key)
@@ -562,6 +443,7 @@ def apply_annotation(
             "AZUREML_SYNAPSE_CLUSTER_IDENTIFIER",
             "AZUREML_SYNAPSE_TOKEN_SERVICE_ENDPOINT",
             "AZUREML_RUN_ID",
+            "AZUREML_RUN_TOKEN",
             "AZUREML_RUN_TOKEN_EXPIRY",
             "AZUREML_OBO_SERVICE_ENDPOINT",
             "AZUREML_OBO_CANARY_TOKEN",
@@ -569,18 +451,22 @@ def apply_annotation(
             "AZUREML_ARM_RESOURCEGROUP",
             "AZUREML_ARM_WORKSPACE_NAME",
             "AZUREML_ARM_PROJECT_NAME",
+            "MLFLOW_DISABLE_ENV_MANAGER_CONDA_WARNING",
+            "MLFLOW_EXPERIMENT_ID",
+            "MLFLOW_EXPERIMENT_NAME",
+            "MLFLOW_RUN_ID",
+            "MLFLOW_TRACKING_TOKEN",
+            "MLFLOW_TRACKING_URI",
             "OID",
-            "TID",
+            "TID"
         ]
     }
     is_test_connection = False
     if workspace_connection_arm_id == TEST_CONNECTION:
         # Used for testing component e2e without consuming OpenAI endpoint
-        endpoint_domain_name = TEST_CONNECTION
         api_version = API_VERSION
         is_test_connection = True
         token_manager = None
-        model_type = GPT_4
     else:
         try:
             # Define authorization token manager
@@ -593,7 +479,6 @@ def apply_annotation(
             print(f"Unable to process request: {e}")
             return
 
-        endpoint_domain_name = token_manager.get_endpoint_domain().replace("https://", "")
         api_version = token_manager.get_api_version()
         api_key = token_manager.get_token()
         api_base = token_manager.get_endpoint_domain()
@@ -602,13 +487,6 @@ def apply_annotation(
             "Created token manager for auth type "
             f"managed identity using auth header {API_KEY}."
         )
-        # use fixed API version since newer versions aren't supported
-        get_model_endpoint = _check_and_format_azure_endpoint_url(
-            AZURE_OPENAI_API_DEPLOYMENT_URL_PATTERN,
-            AZURE_ENDPOINT_DOMAIN_VALID_PATTERN_RE,
-            endpoint_domain_name, "2022-12-01",
-            model_deployment_name)
-        model_type = _get_model_type(token_manager, get_model_endpoint)
 
     all_metrics_pdf = None
     samples_index_rows = []
@@ -622,54 +500,117 @@ def apply_annotation(
     has_context = CONTEXT in production_df.columns
     has_ground_truth = GROUND_TRUTH in production_df.columns
 
+    # get tracking uri
+    tracking_uri = mlflow.get_tracking_uri()
+    run_id = os.environ.get("AZUREML_RUN_ID")
+
     def annotate_batch(iterator):
         for batch in iterator:
             # add environment variables on executors
             for env_var_key, env_var_value in driver_env_vars.items():
                 os.environ[env_var_key] = env_var_value
-
             rows = []
+            input_columns = [PROMPT, COMPLETION]
+            if has_context:
+                input_columns.append(CONTEXT)
+            if has_ground_truth:
+                input_columns.append(GROUND_TRUTH)
             passthrough_cols = get_passthrough_cols(batch)
             for index, row in batch.iterrows():
-                qca = {PROMPT: row[PROMPT], COMPLETION: row[COMPLETION]}
+                qca = {QUERY: row[PROMPT], RESPONSE: row[COMPLETION]}
                 if has_context:
                     qca[CONTEXT] = row[CONTEXT]
                 if has_ground_truth:
                     qca[GROUND_TRUTH] = row[GROUND_TRUTH]
                 rows.append(qca)
 
-            output_dir = tempfile.TemporaryDirectory()
-            evaluate(
-                evaluation_name="gsq-evaluation",
-                data=rows,
-                task_type="qa",
-                data_mapping={
-                    "question": PROMPT,
-                    "context": CONTEXT,
-                    "answer": COMPLETION,
-                    "ground_truth": GROUND_TRUTH
-                },
-                model_config={
-                    "api_version": api_version,
-                    "api_base": api_base,
-                    "api_type": AZURE,
-                    "api_key": api_key,
-                    "deployment_id": model_type
-                },
-                metrics_list=metrics_list,
-                output_path=output_dir.name
+            if not os.path.exists(DEFAULT_PROMPTFLOW_PATH):
+                os.makedirs(DEFAULT_PROMPTFLOW_PATH, exist_ok=True)
+            mlflow.set_tracking_uri(tracking_uri)
+
+            input_dir = tempfile.TemporaryDirectory()
+            evaluation_name = "gsq-evaluation"
+            run_name = evaluation_name + "-child-run"
+            model_config = AzureOpenAIModelConfiguration(
+                azure_endpoint=api_base,
+                api_key=api_key,
+                azure_deployment=model_deployment_name,
+                api_version=api_version,
             )
-            tabular_result = pd.read_json(os.path.join(output_dir.name, "eval_results.jsonl"), lines=True)
+            evaluators = {}
+            evaluator_config = {}
+            for metric_name in metrics_list:
+                evaluator = EVALUATOR_NAME_TO_CLASS[metric_name]
+                metric_name_compact = COLUMN_TO_COMPACT_METRIC_NAME[
+                    metric_name].lower()
+                evaluators[metric_name_compact] = evaluator(
+                    model_config=model_config)
+                evaluator_config[metric_name_compact] = {
+                    COLUMN_MAPPING: {
+                        RESPONSE: format_data_column(RESPONSE),
+                        QUERY: format_data_column(QUERY)
+                    }
+                }
+                config = evaluator_config[metric_name_compact]
+                if has_context:
+                    config[COLUMN_MAPPING][CONTEXT] = format_data_column(CONTEXT)
+                if has_ground_truth:
+                    config[COLUMN_MAPPING][GROUND_TRUTH] = format_data_column(GROUND_TRUTH)
+            # write rows to jsonl file
+            input_file_name = "eval_input_" + str(uuid.uuid4()) + ".jsonl"
+            input_file_path = os.path.join(input_dir.name, input_file_name)
+            with open(input_file_path, "w") as f:
+                for row in rows:
+                    f.write(json.dumps(row) + '\n')
+            # get existing run
+            with mlflow.start_run():
+                # create child run
+                with mlflow.start_run(nested=mlflow.active_run(), run_name=run_name) as run:
+                    tabular_result = evaluate(
+                        evaluation_name=evaluation_name,
+                        data=input_file_path,
+                        evaluators=evaluators,
+                        evaluator_config=evaluator_config
+                    )
+                    child_run_id = run.info.run_id
+                    # add promptflow debug logs to run
+                    hostname = socket.gethostname()
+                    artifact_path = f"worker_promptflow/{hostname}"
+                    client = mlflow.tracking.MlflowClient()
+                    client.log_artifacts(
+                        child_run_id, DEFAULT_PROMPTFLOW_PATH, artifact_path=artifact_path)
+            # convert rows from result to pandas dataframe
+            tabular_result = pd.DataFrame(tabular_result["rows"])
             for passthrough_column, passthrough_values in passthrough_cols.items():
                 tabular_result[passthrough_column] = passthrough_values
             # rename metric columns
-            for column_name in metrics_list:
-                # set failures to -1
-                tabular_result[column_name] = pd.to_numeric(tabular_result[column_name], errors='coerce')
-                tabular_result[column_name].fillna(-1, inplace=True)
-                tabular_result.rename(
-                    columns={column_name: COLUMN_TO_COMPACT_METRIC_NAME[column_name]},
-                    inplace=True)
+            try:
+                for column_name in metrics_list:
+                    # set failures to -1
+                    metric_name_compact = COLUMN_TO_COMPACT_METRIC_NAME[column_name]
+                    # output column names follow schema like "outputs.coherence.gpt_coherence"
+                    result_name = ("outputs." + metric_name_compact + "." + column_name).lower()
+                    tabular_result[result_name] = pd.to_numeric(tabular_result[result_name], errors='coerce')
+                    tabular_result[result_name].fillna(-1, inplace=True)
+                    tabular_result.rename(columns={result_name: metric_name_compact}, inplace=True)
+                for column_name in input_columns:
+                    # input column names follow schema like "inputs.context"
+                    if column_name == PROMPT:
+                        result_name = "inputs." + QUERY
+                    elif column_name == COMPLETION:
+                        result_name = "inputs." + RESPONSE
+                    else:
+                        result_name = "inputs." + column_name
+                    tabular_result.rename(columns={result_name: column_name}, inplace=True)
+            except KeyError as e:
+                # raise new user error with more context
+                raise InvalidInputError(
+                    f"Unable to retrieve and rename {column_name}. "
+                    f"Usually this indicates an invalid configuration or connection. "
+                    f"Please check the model_deployment_name and workspace_connection_arm_id. "
+                    f"For more detailed error information please see the promptflow "
+                    f"debug folder in the child run with run id {child_run_id}."
+                ) from e
             yield tabular_result
 
     # used for testing without using openai connection
@@ -753,8 +694,7 @@ def apply_annotation(
                              .withColumnRenamed(COMPLETION, completion_column_name)
                              .withColumnRenamed(CONTEXT, context_column_name)
                              .withColumnRenamed(GROUND_TRUTH, ground_truth_column_name))
-            run_id = os.environ.get("AZUREML_RUN_ID")
-            io_utils.save_spark_df_as_mltable(violations_df, violations[metric_name_compact.lower()])
+            save_spark_df_as_mltable(violations_df, violations[metric_name_compact.lower()])
             samples_index_rows.append({METRIC_NAME: f"Acceptable{metric_name_compact}ScorePerInstance",
                                        GROUP: "",
                                        GROUP_DIMENSION: "",
@@ -787,22 +727,22 @@ def apply_annotation(
         ]
     )
 
-    # Save the annotations dataframe as output
-    io_utils.save_spark_df_as_mltable(annotations_df, evaluation)
     samples_index_rows.append({METRIC_NAME: "Evaluation",
                                GROUP: "",
                                GROUP_DIMENSION: "",
                                SAMPLES_NAME: "Evaluation",
                                ASSET: f"azureml_{run_id}_output_data_evaluation:1"})
-
     # Create a new DataFrame for the samples index data
     samples_df = spark.createDataFrame(samples_index_rows, metadata_schema)
-    io_utils.save_spark_df_as_mltable(samples_df, samples_index)
+
+    # Save the samples and annotations dataframes as output
+    save_spark_df_as_mltable(annotations_df, evaluation)
+    save_spark_df_as_mltable(samples_df, samples_index)
 
     # temporary workaround for pandas>2.0 until pyspark upgraded to 3.4.1, see issue:
     # https://stackoverflow.com/questions/76404811/attributeerror-dataframe-object-has-no-attribute-iteritems
     pd.DataFrame.iteritems = pd.DataFrame.items
-    io_utils.save_spark_df_as_mltable(
+    save_spark_df_as_mltable(
         spark.createDataFrame(all_metrics_pdf),
         histogram)
 

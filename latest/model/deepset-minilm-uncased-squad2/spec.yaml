@@ -33,6 +33,7 @@ tags:
   license: cc-by-4.0
   SharedComputeCapacityEnabled: ''
   task: question-answering
+  hiddenlayerscanned: ""
   huggingface_model_id: deepset/minilm-uncased-squad2
   inference_compute_allow_list: [Standard_DS3_v2, Standard_D4a_v4, Standard_D4as_v4,
     Standard_DS4_v2, Standard_D8a_v4, Standard_D8as_v4, Standard_DS5_v2, Standard_D16a_v4,
@@ -55,7 +56,7 @@ tags:
     Standard_NC8as_T4_v3, Standard_NC12s_v3, Standard_NC16as_T4_v3, Standard_NC24s_v3,
     Standard_NC64as_T4_v3, Standard_NC24ads_A100_v4, Standard_NC48ads_A100_v4, Standard_NC96ads_A100_v4,
     Standard_ND96asr_v4, Standard_ND96amsr_A100_v4, Standard_ND40rs_v2]
-version: 11
+version: 12
 description: |
   # Training Details
 
@@ -88,6 +89,12 @@ description: |
   "NoAns_f1": 73.91084945332211,
   "NoAns_total": 5945
   ```
+
+  # Model Evaluation samples
+
+  Task|Use case|Dataset|Python sample (Notebook)|CLI with YAML
+  |--|--|--|--|--|
+  Question Answering|Extractive Q&A|<a href="https://huggingface.co/datasets/squad_v2" target="_blank">Squad v2</a>|<a href="https://aka.ms/azureml-eval-sdk-question-answering" target="_blank">evaluate-model-question-answering.ipynb</a>|<a href="https://aka.ms/azureml-eval-cli-question-answering" target="_blank">evaluate-model-question-answering.yml</a>
 
   # Inference samples
 

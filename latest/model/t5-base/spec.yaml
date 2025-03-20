@@ -15,6 +15,13 @@ properties:
     Standard_NC8as_T4_v3, Standard_NC12s_v3, Standard_NC16as_T4_v3, Standard_NC24s_v3,
     Standard_NC64as_T4_v3, Standard_NC24ads_A100_v4, Standard_NC48ads_A100_v4, Standard_NC96ads_A100_v4,
     Standard_ND96asr_v4, Standard_ND96amsr_A100_v4, Standard_ND40rs_v2
+  finetune-min-sku-spec: 4|1|28|64
+  finetune-recommended-sku: Standard_NV12s_v3, Standard_NV24s_v3, Standard_NV48s_v3,
+    Standard_NC6s_v3, Standard_NC12s_v3, Standard_NC24s_v3, Standard_NC24rs_v3, Standard_NC4as_T4_v3,
+    Standard_NC8as_T4_v3, Standard_NC16as_T4_v3, Standard_NC64as_T4_v3, Standard_NC24ads_A100_v4,
+    Standard_NC48ads_A100_v4, Standard_NC96ads_A100_v4, Standard_ND40rs_v2, Standard_ND96asr_v4,
+    Standard_ND96amsr_A100_v4
+  finetuning-tasks: summarization, text-classification, translation
   inference-min-sku-spec: 4|0|16|56
   inference-recommended-sku: Standard_DS4_v2, Standard_D8a_v4, Standard_D8as_v4, Standard_DS5_v2,
     Standard_D16a_v4, Standard_D16as_v4, Standard_D32a_v4, Standard_D32as_v4, Standard_D48a_v4,
@@ -29,9 +36,12 @@ properties:
   languages: en, fr, ro, de
 tags:
   license: apache-2.0
+  model_specific_defaults: {'apply_deepspeed': 'true', 'apply_lora': 'true', 'apply_ort': 'true'}
   SharedComputeCapacityEnabled: ''
+  mlflow_flavor: transformers
   task: text-translation
   huggingface_model_id: t5-base
+  hiddenlayerscanned: ''
   inference_compute_allow_list: [Standard_DS4_v2, Standard_D8a_v4, Standard_D8as_v4,
     Standard_DS5_v2, Standard_D16a_v4, Standard_D16as_v4, Standard_D32a_v4, Standard_D32as_v4,
     Standard_D48a_v4, Standard_D48as_v4, Standard_D64a_v4, Standard_D64as_v4, Standard_D96a_v4,
@@ -52,7 +62,12 @@ tags:
     Standard_NC8as_T4_v3, Standard_NC12s_v3, Standard_NC16as_T4_v3, Standard_NC24s_v3,
     Standard_NC64as_T4_v3, Standard_NC24ads_A100_v4, Standard_NC48ads_A100_v4, Standard_NC96ads_A100_v4,
     Standard_ND96asr_v4, Standard_ND96amsr_A100_v4, Standard_ND40rs_v2]
-version: 13
+  finetune_compute_allow_list: [Standard_NV12s_v3, Standard_NV24s_v3, Standard_NV48s_v3,
+    Standard_NC6s_v3, Standard_NC12s_v3, Standard_NC24s_v3, Standard_NC24rs_v3, Standard_NC4as_T4_v3,
+    Standard_NC8as_T4_v3, Standard_NC16as_T4_v3, Standard_NC64as_T4_v3, Standard_NC24ads_A100_v4,
+    Standard_NC48ads_A100_v4, Standard_NC96ads_A100_v4, Standard_ND40rs_v2, Standard_ND96asr_v4,
+    Standard_ND96amsr_A100_v4]
+version: 17
 description: |
   The developers of the Text-To-Text Transfer Transformer (T5) [write](https://ai.googleblog.com/2020/02/exploring-transfer-learning-with-t5.html): 
 
@@ -112,6 +127,12 @@ description: |
   ## Testing Data, Factors & Metrics
 
   The developers evaluated the model on 24 tasks, see the [research paper](https://jmlr.org/papers/volume21/20-074/20-074.pdf) for full details.
+
+  # Model Evaluation samples
+
+  Task| Use case| Dataset| Python sample (Notebook)| CLI with YAML
+  |--|--|--|--|--|
+  Translation | Translation | <a href="https://huggingface.co/datasets/wmt16/viewer/ro-en/train" target="_blank">wmt16/ro-en</a> | <a href="https://aka.ms/azureml-eval-sdk-translation" target="_blank">evaluate-model-translation.ipynb</a> | <a href="https://aka.ms/azureml-eval-cli-translation" target="_blank">evaluate-model-translation.yml</a>
 
   # Inference samples
 

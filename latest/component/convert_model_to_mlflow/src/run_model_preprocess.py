@@ -28,6 +28,8 @@ def _get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-id", type=str, required=False, help="Hugging Face model ID")
     parser.add_argument("--task-name", type=str, required=False, help="Hugging Face task type")
+    parser.add_argument("--model-flavor", type=str, required=False, help="Model flavor HFtransformersV2 / OSS")
+    parser.add_argument("--vllm-enabled", type=str, required=True, default="false", help="Flag to enabled vllm")
     parser.add_argument("--hf-config-args", type=str, required=False, help="Hugging Face config init args")
     parser.add_argument("--hf-tokenizer-args", type=str, required=False, help="Hugging Face tokenizer init args")
     parser.add_argument("--hf-model-args", type=str, required=False, help="Hugging Face model init args")
@@ -79,12 +81,6 @@ def _get_parser():
         required=True,
         help="Output MLflow model",
     )
-    parser.add_argument(
-        "--model-import-job-path",
-        type=Path,
-        required=True,
-        help="JSON file containing model job path for model lineage",
-    )
     return parser
 
 
@@ -96,6 +92,8 @@ def run():
 
     model_id = args.model_id
     task_name = args.task_name
+    model_flavor = args.model_flavor
+    vllm_enabled = False if args.vllm_enabled.lower() == "false" else True
     model_framework = args.model_framework
     hf_config_args = args.hf_config_args
     hf_tokenizer_args = args.hf_tokenizer_args
@@ -111,7 +109,6 @@ def run():
     model_download_metadata_path = args.model_download_metadata
     model_path = args.model_path
     mlflow_model_output_dir = args.mlflow_model_output_dir
-    model_import_job_path = args.model_import_job_path
     license_file_path = args.license_file_path
     TRUST_CODE_KEY = "trust_remote_code=True"
 
@@ -155,6 +152,8 @@ def run():
             logger.warning(f"{TRUST_CODE_KEY} is not provided for hf_config_args. Using {TRUST_CODE_KEY}.")
     preprocess_args["task"] = task_name.lower()
     preprocess_args["model_id"] = model_id if model_id else preprocess_args.get("model_id")
+    preprocess_args["model_flavor"] = model_flavor if model_flavor else "HFtransformersV2"
+    preprocess_args["vllm_enabled"] = vllm_enabled
     preprocess_args[HF_CONF.EXTRA_PIP_REQUIREMENTS.value] = extra_pip_requirements
     preprocess_args[HF_CONF.HF_CONFIG_ARGS.value] = hf_config_args
     preprocess_args[HF_CONF.HF_TOKENIZER_ARGS.value] = hf_tokenizer_args
@@ -179,18 +178,14 @@ def run():
 
     # Copy license file to output model path
     if license_file_path:
+        # removing the default dumped license when user provides custom license file.
+        transformers_license_path = os.path.join(mlflow_model_output_dir, "LICENSE.txt")
+        if os.path.isfile(transformers_license_path):
+            os.remove(transformers_license_path)
+
         shutil.copy(license_file_path, mlflow_model_output_dir)
 
     logger.info(f"listing output directory files: {mlflow_model_output_dir}:\n{os.listdir(mlflow_model_output_dir)}")
-
-    # Add job path
-    this_job = os.environ["MLFLOW_RUN_ID"]
-    path = f"azureml://jobs/{this_job}/outputs/mlflow_model_folder"
-    model_path_dict = {"path": path}
-    json_object = json.dumps(model_path_dict, indent=4)
-    with open(model_import_job_path, "w") as outfile:
-        outfile.write(json_object)
-    logger.info("Finished writing job path")
 
 
 if __name__ == "__main__":

@@ -32,6 +32,7 @@ tags:
   task: fill-mask
   license: apache-2.0
   SharedComputeCapacityEnabled: ""
+  hiddenlayerscanned: ""
   datasets: bookcorpus, wikipedia
   huggingface_model_id: distilbert-base-uncased
   inference_compute_allow_list: [Standard_DS3_v2, Standard_D4a_v4, Standard_D4as_v4,
@@ -55,7 +56,7 @@ tags:
     Standard_NC8as_T4_v3, Standard_NC12s_v3, Standard_NC16as_T4_v3, Standard_NC24s_v3,
     Standard_NC64as_T4_v3, Standard_NC24ads_A100_v4, Standard_NC48ads_A100_v4, Standard_NC96ads_A100_v4,
     Standard_ND96asr_v4, Standard_ND96amsr_A100_v4, Standard_ND40rs_v2]
-version: 12
+version: 13
 description: |
   DistilBERT is a transformers model, smaller and faster than BERT, which was pretrained on the same corpus in a
   self-supervised fashion, using the BERT base model as a teacher. This means it was pretrained on the raw texts only,
@@ -139,6 +140,14 @@ description: |
   be fine-tuned on a downstream task.
 
   Note that this model is primarily aimed at being fine-tuned on tasks that use the whole sentence (potentially masked) to make decisions, such as sequence classification, token classification or question answering. For tasks such as text generation you should look at model like GPT2.
+
+  # Model Evaluation samples
+
+  Task | Use case | Dataset | Python sample (Notebook) | CLI with YAML
+  |--|--|--|--|--|
+  Fill Mask|Fill Mask|<a href="https://huggingface.co/datasets/rcds/wikipedia-for-mask-filling" target="_blank">rcds/wikipedia-for-mask-filling</a>|<a href="https://aka.ms/azureml-eval-sdk-fill-mask/" target="_blank">evaluate-model-fill-mask.ipynb</a>|<a href="https://aka.ms/azureml-eval-cli-fill-mask/" target="_blank">evaluate-model-fill-mask.yml</a>
+
+  # Inference Samples
 
   Inference type|Python sample (Notebook)
   |--|--|

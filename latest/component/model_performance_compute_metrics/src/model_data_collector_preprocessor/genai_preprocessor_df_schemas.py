@@ -14,10 +14,8 @@ def _get_preprocessed_span_logs_df_schema() -> StructType:
         StructField('end_time', TimestampType(), False),
         StructField('events', StringType(), False),
         StructField('framework', StringType(), False),
-        StructField('input', StringType(), False),
         StructField('links', StringType(), False),
         StructField('name', StringType(), False),
-        StructField('output', StringType(), False),
         StructField('parent_id', StringType(), True),
         # StructField('session_id', StringType(), True),
         StructField('span_id', StringType(), False),
@@ -40,8 +38,8 @@ def _get_aggregated_trace_log_spark_df_schema() -> StructType:
             StructField("session_id", StringType(), True),
             StructField("start_time", TimestampType(), False),
             StructField("end_time", TimestampType(), False),
-            StructField("input", StringType(), False),
-            StructField("output", StringType(), False),
+            StructField("input", StringType(), True),
+            StructField("output", StringType(), True),
             StructField("root_span", StringType(), True),
         ]
     )

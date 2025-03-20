@@ -3,14 +3,12 @@ name: validation_trigger_model_evaluation
 display_name: Validation Trigger Model Evaluation
 description: Component for enabling validation of model evaluation pipeline.
 
-version: 0.0.21
+version: 0.0.36
 type: command
 tags:
   type: evaluation
   sub_type: validation
   Internal: ""
-
-# Pipeline inputs
 inputs:
   compute_name:
     type: string
@@ -71,7 +69,7 @@ outputs:
     is_control: true
 
 is_deterministic: true
-environment: azureml://registries/azureml/environments/model-evaluation/versions/16
+environment: azureml://registries/azureml/environments/model-evaluation/labels/latest
 code: ../../src
 
 command: >

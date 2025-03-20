@@ -5,14 +5,16 @@
 
 import difflib
 import filecmp
+import os
 import re
 import shutil
-from pathlib import Path
+from pathlib import Path, PurePath
 from ruamel.yaml import YAML
 from typing import List, Tuple, Union
 
 import azureml.assets as assets
 from azureml.assets.util import logger
+from azureml.assets.config import ValidationException
 
 RELEASE_SUBDIR = "latest"
 EXCLUDE_DIR_PREFIX = "!"
@@ -90,6 +92,56 @@ def _are_files_equal_ignore_eol(file1: Path, file2: Path) -> bool:
                 return False
             if line1 is None and line2 is None:
                 return True
+
+
+def _resolve_from_file(value):
+    if os.path.isfile(value):
+        with open(value, 'r') as f:
+            content = f.read()
+            return (True, content)
+    else:
+        return (False, None)
+
+
+def resolve_from_file_for_asset(asset: assets.AssetConfig, value):
+    """Resolve the value from a file for an asset if it is a file, otherwise returns the value.
+
+    Args:
+        asset (AssetConfig): the asset to try and resolve the value for
+        value: value to try and resolve
+    """
+    if not is_file_relative_to_asset_path(asset, value):
+        return value
+
+    path_value = value if isinstance(value, Path) else Path(value)
+
+    if not path_value.is_relative_to(asset.file_path):
+        path_value = asset._append_to_file_path(path_value)
+
+    (is_resolved_from_file, resolved_value) = _resolve_from_file(path_value)
+
+    if is_resolved_from_file:
+        return resolved_value
+    else:
+        return value
+
+
+def is_file_relative_to_asset_path(asset: assets.AssetConfig, value):
+    """Check if the value from is a file with respect to the asset path.
+
+    Args:
+        asset (AssetConfig): the asset to try and resolve the value for
+        value: value to check
+    """
+    if not isinstance(value, str) and not isinstance(value, PurePath):
+        return False
+
+    path_value = value if isinstance(value, Path) else Path(value)
+
+    if not path_value.is_relative_to(asset.file_path):
+        path_value = asset._append_to_file_path(path_value)
+
+    return os.path.isfile(path_value)
 
 
 def copy_replace_dir(source: Path, dest: Path, paths: List[Path] = None):
@@ -333,12 +385,28 @@ def find_asset_config_files(input_dirs: Union[List[Path], Path],
         List[Path]: Asset config files found.
     """
     input_dirs, exclude_dirs = _convert_excludes(input_dirs, exclude_dirs)
+    changed_files_resolved = set([file.resolve() for file in changed_files] if changed_files else [])
 
     found_assets = []
     for input_dir in input_dirs:
         for file in input_dir.rglob(asset_config_filename):
-            # If specified, skip assets with no changed files
-            if changed_files and not any([f for f in changed_files if file.parent in f.parents]):
+            # If specified, skip assets when no change in asset, source_code and test_code
+            try:
+                asset_config = assets.AssetConfig(file)
+                test_dir_path = asset_config.pytest_tests_dir_with_path
+                test_dir_path = test_dir_path.resolve() if test_dir_path else Path()
+
+                release_paths_resolved = [path.resolve() for path in asset_config.release_paths]
+                asset_changed_files = changed_files_resolved & set(release_paths_resolved)
+            except ValidationException:
+                test_dir_path = Path()
+                asset_changed_files = set()
+
+            if changed_files and not asset_changed_files and not any(
+                file.parent in f.parents or
+                test_dir_path in f.resolve().parents
+                for f in changed_files
+            ):
                 continue
 
             # If specified, skip excluded directories
