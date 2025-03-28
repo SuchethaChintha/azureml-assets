@@ -30,7 +30,7 @@ RUN pip install 'responsibleai~=0.36.0' \
                 'responsibleai-vision==0.3.8'
 
 # Install azureml packages
-RUN pip install 'azureml-core==1.59.0.post1' \
+RUN pip install 'azureml-core==1.59.0.post2' \
                 'azureml-mlflow==1.59.0.post1' \
                 'azureml-rai-utils==0.0.6'
 
