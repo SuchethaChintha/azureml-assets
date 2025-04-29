@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04:20250414.v1
+FROM mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04:20250427.v1
 
 WORKDIR /
 ENV CONDA_PREFIX=/azureml-envs/responsibleai-text
@@ -24,7 +24,7 @@ RUN pip install 'responsibleai~=0.36.0' \
 
 # Install main azureml packages
 RUN pip install 'azureml-core==1.60.0' \
-                'azureml-mlflow==1.60.0' \
+                'azureml-mlflow==1.60.0.post1' \
                 'azureml-rai-utils==0.0.6'
 
 RUN pip install 'azureml-dataset-runtime==1.60.0' \

@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/azureml/openmpi5.0-ubuntu24.04:20250414.v1
+FROM mcr.microsoft.com/azureml/openmpi5.0-ubuntu24.04:20250427.v1
 
 ENV AZUREML_CONDA_ENVIRONMENT_PATH /azureml-envs/azureml-automl-dnn
 # Prepend path to AzureML conda environment
@@ -44,7 +44,7 @@ RUN conda create -p $AZUREML_CONDA_ENVIRONMENT_PATH \
 RUN pip install \
                 # begin pypi dependencies
                 azureml-core==1.60.0 \
-                azureml-mlflow==1.60.0 \
+                azureml-mlflow==1.60.0.post1 \
                 azureml-pipeline-core==1.60.0 \
                 azureml-telemetry==1.60.0 \
                 azureml-interpret==1.60.0 \

@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/azureml/openmpi4.1.0-cuda11.8-cudnn8-ubuntu22.04:20250414.v1
+FROM mcr.microsoft.com/azureml/openmpi4.1.0-cuda11.8-cudnn8-ubuntu22.04:20250427.v1
 
 USER root
 
@@ -75,7 +75,7 @@ RUN pip install \
                 azureml-train-automl-client==1.60.0 \
                 azureml-train-automl-runtime==1.60.0 \
                 azureml-dataset-runtime==1.60.0 \
-                azureml-mlflow==1.60.0 \
+                azureml-mlflow==1.60.0.post1 \
                 'azureml-model-management-sdk==1.0.1b6.post1' \
                 'azure-identity>=1.16.1' \
                 'inference-schema' \
