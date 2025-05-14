@@ -29,7 +29,7 @@ dependencies:
   - msrest>=0.6.21,<0.7.1
   - mltable==1.6.1
   - openai==1.78.1
-  - azure-ai-ml==1.27.0
+  - azure-ai-ml==1.27.1
   - mldesigner==0.1.0b19
   - tiktoken
   - idna==3.7
