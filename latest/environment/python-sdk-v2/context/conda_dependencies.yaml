@@ -16,4 +16,4 @@ dependencies:
     - urllib3==2.6.3
     - paramiko==4.0.0
     - idna==3.11
-    - tqdm==4.67.1
+    - tqdm==4.67.2
