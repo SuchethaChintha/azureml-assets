@@ -65,17 +65,17 @@ RUN conda install pytorch=2.2.2 -c pytorch -c nvidia && conda clean -a -y
 RUN pip install \
                 # begin pypi dependencies
                 azureml-core==1.61.0.post1 \
-                azureml-pipeline-core==1.61.0 \
-                azureml-telemetry==1.61.0 \
-                azureml-defaults==1.61.0 \
-                azureml-interpret==1.61.0 \
-                azureml-responsibleai==1.61.0 \
-                azureml-automl-core==1.61.0.post1 \
-                azureml-automl-runtime==1.61.0 \
-                azureml-train-automl-client==1.61.0.post1 \
-                azureml-train-automl-runtime==1.61.0 \
-                azureml-dataset-runtime==1.61.0 \
-                azureml-mlflow==1.61.0.post1 \
+                azureml-pipeline-core==1.62.0 \
+                azureml-telemetry==1.62.0 \
+                azureml-defaults==1.62.0 \
+                azureml-interpret==1.62.0 \
+                azureml-responsibleai==1.62.0 \
+                azureml-automl-core==1.62.0 \
+                azureml-automl-runtime==1.62.0 \
+                azureml-train-automl-client==1.62.0 \
+                azureml-train-automl-runtime==1.62.0 \
+                azureml-dataset-runtime==1.62.0 \
+                azureml-mlflow==1.62.0 \
                 'azureml-model-management-sdk==1.0.1b6.post1' \
                 'azure-identity>=1.16.1' \
                 'inference-schema' \

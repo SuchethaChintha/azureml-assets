@@ -60,13 +60,13 @@ SHELL ["conda", "run", "-p", "$AZUREML_CONDA_ENVIRONMENT_PATH", "/bin/bash", "-c
 RUN pip install \
                 # begin pypi dependencies
                 azureml-core==1.61.0.post1 \
-                azureml-mlflow==1.61.0.post1 \
-                azureml-automl-core==1.61.0.post1 \
-                azureml-automl-dnn-nlp==1.61.0.post1 \
-                azureml-automl-runtime==1.61.0 \
-                azureml-train-automl-client==1.61.0.post1 \
-                azureml-train-automl-runtime==1.61.0 \
-                azureml-defaults==1.61.0 \
+                azureml-mlflow==1.62.0 \
+                azureml-automl-core==1.62.0 \
+                azureml-automl-dnn-nlp==1.62.0 \
+                azureml-automl-runtime==1.62.0 \
+                azureml-train-automl-client==1.62.0 \
+                azureml-train-automl-runtime==1.62.0 \
+                azureml-defaults==1.62.0 \
                 'azure-identity>=1.16.1' \
                 'sentencepiece==0.1.97' \
                 'cryptography>=42.0.5'\
