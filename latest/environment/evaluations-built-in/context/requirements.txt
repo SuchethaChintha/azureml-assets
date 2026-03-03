@@ -8,5 +8,5 @@ opentelemetry-sdk==1.39.1
 azure-monitor-query==2.0.0
 croniter==6.0.0
 azure-monitor-opentelemetry==1.8.6
-promptflow-azure==1.18.2
+promptflow-azure==1.18.3
 azure-identity==1.25.2
