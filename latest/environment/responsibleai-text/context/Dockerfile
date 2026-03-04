@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04:20260223.v1
+FROM mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04:20260303.v5
 
 WORKDIR /
 ENV CONDA_PREFIX=/azureml-envs/responsibleai-text
