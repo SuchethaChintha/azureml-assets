@@ -15,7 +15,7 @@ dependencies:
   - protobuf<4.0.0
   - psutil>=5.8,<5.9
   - pandas>=2.0.2,<2.1.0
-  - azureml-core==1.61.0.post2
+  - azureml-core==1.61.0.post3
   - azureml-automl-core==1.62.0
   - azureml-defaults==1.62.0
   - azureml-mlflow==1.62.0.post1
@@ -34,7 +34,7 @@ dependencies:
   - tiktoken
   - idna==3.7
   - pydantic
-  - mteb==2.10.12
+  - mteb==2.10.13
   - setuptools>=70.0.0
   - cryptography==43.0.1
   # batch score dependencies
