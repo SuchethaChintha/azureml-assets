@@ -30,11 +30,11 @@ dependencies:
   - mltable==1.6.3
   - openai==2.30.0
   - azure-ai-ml==1.32.0
-  - mldesigner==0.1.0b21
+  - mldesigner==0.1.0b22
   - tiktoken
   - idna==3.7
   - pydantic
-  - mteb==2.12.5
+  - mteb==2.12.7
   - setuptools>=70.0.0
   - cryptography==43.0.1
   # batch score dependencies
