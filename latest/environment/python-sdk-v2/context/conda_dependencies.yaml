@@ -15,5 +15,5 @@ dependencies:
     - certifi==2026.2.25
     - urllib3==2.6.3
     - paramiko==4.0.0
-    - idna==3.11
+    - idna==3.12
     - tqdm==4.67.3
