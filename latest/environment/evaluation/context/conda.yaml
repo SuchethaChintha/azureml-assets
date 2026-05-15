@@ -11,7 +11,7 @@ dependencies:
   - azureml-core==1.61.0.post3
   - azureml-telemetry==1.62.0
   - mltable==1.6.3
-  - azureml-automl-core==1.62.0
+  - azureml-automl-core==1.62.0.post3
   - rouge-score>=0.1.2
   - nltk>=3.9.1
   - pandas>=2.2.3

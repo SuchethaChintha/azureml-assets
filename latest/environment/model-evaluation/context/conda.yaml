@@ -16,7 +16,7 @@ dependencies:
   - psutil>=5.8,<5.9
   - pandas>=2.0.2,<2.1.0
   - azureml-core==1.61.0.post3
-  - azureml-automl-core==1.62.0
+  - azureml-automl-core==1.62.0.post3
   - azureml-defaults==1.62.0
   - azureml-mlflow==1.62.0.post2
   - azureml-telemetry==1.62.0
