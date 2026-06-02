@@ -63,7 +63,7 @@ RUN pip install \
                 azureml-mlflow==1.62.0.post2 \
                 azureml-automl-core==1.62.0.post3 \
                 azureml-automl-dnn-nlp==1.62.0 \
-                azureml-automl-runtime==1.62.0 \
+                azureml-automl-runtime==1.62.0.post1 \
                 azureml-train-automl-client==1.62.0 \
                 azureml-train-automl-runtime==1.62.0 \
                 azureml-defaults==1.62.0 \
