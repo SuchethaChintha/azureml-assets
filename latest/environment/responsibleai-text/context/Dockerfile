@@ -24,7 +24,7 @@ RUN pip install 'responsibleai~=0.36.0' \
 
 # Install main azureml packages
 RUN pip install 'azureml-core==1.61.0.post4' \
-                'azureml-mlflow==1.62.0.post3' \
+                'azureml-mlflow==1.62.0.post4' \
                 'azureml-rai-utils==0.0.6'
 
 RUN pip install 'azureml-dataset-runtime==1.62.0' \
