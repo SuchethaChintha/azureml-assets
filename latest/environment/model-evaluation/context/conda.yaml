@@ -18,7 +18,7 @@ dependencies:
   - azureml-core==1.61.0.post4
   - azureml-automl-core==1.62.0.post3
   - azureml-defaults==1.62.0
-  - azureml-mlflow==1.62.0.post4
+  - azureml-mlflow==1.62.0.post5
   - azureml-telemetry==1.62.0
   - azureml-acft-common-components[image]==0.0.91
   - azureml-evaluate-mlflow==0.0.91
