@@ -44,7 +44,7 @@ RUN pip install \
                 azureml-train-automl-client==1.62.0 \
                 azureml-train-automl-runtime==1.62.0 \
                 azureml-train-automl==1.62.0 \
-                azureml-dataset-runtime==1.62.0 \
+                azureml-dataset-runtime==1.62.0.post1 \
                 azureml-defaults==1.62.0 \
                 # TODO: replace the hard coded above by a referenceto azureml-train-automl[tabular]
                 'mlflow-skinny==2.15.1' \

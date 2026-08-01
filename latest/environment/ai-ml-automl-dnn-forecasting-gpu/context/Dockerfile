@@ -51,7 +51,7 @@ RUN pip install \
                 azureml-automl-runtime==1.62.0.post1 \
                 azureml-train-automl-client==1.62.0 \
                 azureml-train-automl-runtime==1.62.0 \
-                azureml-dataset-runtime==1.62.0 \
+                azureml-dataset-runtime==1.62.0.post1 \
                 azureml-train-automl==1.62.0 \
                 azureml-contrib-automl-dnn-forecasting==1.62.0 \
                 'azure-identity>=1.16.1' \

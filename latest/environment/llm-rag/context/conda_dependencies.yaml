@@ -19,7 +19,7 @@ dependencies:
     # Azure ML
   - azureml-contrib-services
   - azureml-telemetry==1.62.0
-  - azureml-dataset-runtime==1.62.0
+  - azureml-dataset-runtime==1.62.0.post1
   - azureml-inference-server-http>=1.3.0
   - azureml-mlflow==1.62.0.post5
     # More packages needed for RAG extras

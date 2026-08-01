@@ -53,7 +53,7 @@ RUN pip install \
                 azureml-automl-runtime==1.62.0.post1 \
                 azureml-train-automl-client==1.62.0 \
                 azureml-train-automl-runtime==1.62.0 \
-                azureml-dataset-runtime==1.62.0 \
+                azureml-dataset-runtime==1.62.0.post1 \
                 azureml-defaults==1.62.0 \
                 'inference-schema' \
                 'prophet==1.1.4' \
