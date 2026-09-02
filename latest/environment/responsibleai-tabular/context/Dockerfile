@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04:20260810.v1
+FROM mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu22.04:20260901.v1
 
 # Install wkhtmltopdf for pdf rendering from html
 RUN apt-get -y update && apt-get -y install wkhtmltopdf
@@ -31,7 +31,7 @@ RUN pip install --no-deps 'charset-normalizer==2.0.12' \
 # Install azureml packages
 RUN pip install 'azureml-dataset-runtime==1.62.0.post1' \
                 'azureml-core==1.61.0.post4' \
-                'azureml-mlflow==1.62.0.post5' \
+                'azureml-mlflow==1.62.0.post6' \
                 'azureml-telemetry==1.62.0' \
                 'azureml-rai-utils==0.0.6'
 
