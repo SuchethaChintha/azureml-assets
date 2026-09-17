@@ -60,7 +60,7 @@ RUN pip install \
                 azureml-defaults==1.62.0 \
                 azureml-interpret==1.62.0 \
                 azureml-train-automl-runtime==1.62.0 \
-                azureml-automl-dnn-vision==1.62.0 \
+                azureml-automl-dnn-vision==1.62.0.post1 \
                 'azureml-dataprep>=2.24.4' \
                 'azure-identity>=1.16.1'
                 # end pypi dependencies
