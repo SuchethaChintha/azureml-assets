@@ -18,7 +18,7 @@ dependencies:
   - azureml-core==1.61.0.post4
   - azureml-automl-core==1.62.0.post3
   - azureml-defaults==1.62.0
-  - azureml-mlflow==1.62.0.post6
+  - azureml-mlflow==1.62.0.post7
   - azureml-telemetry==1.62.0
   - azureml-acft-common-components[image]==0.0.91
   - azureml-evaluate-mlflow==0.0.91
@@ -28,13 +28,13 @@ dependencies:
   - lightgbm>=3.2.1,<4.2.0
   - msrest>=0.6.21,<0.7.1
   - mltable==1.7.0
-  - openai==3.52.0
+  - openai==3.55.0
   - azure-ai-ml==1.35.2
   - mldesigner==0.1.0b23
   - tiktoken
   - idna==3.7
   - pydantic
-  - mteb==2.27.15
+  - mteb==2.27.18
   - setuptools>=70.0.0
   - cryptography==43.0.1
   # batch score dependencies
